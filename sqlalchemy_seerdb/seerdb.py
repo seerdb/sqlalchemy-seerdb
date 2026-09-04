@@ -21,14 +21,17 @@ matches what the generic dialect emits.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, ClassVar
 
+from sqlalchemy import types as sqltypes
 from sqlalchemy import util
+from sqlalchemy.dialects.oracle import base as _oracle_base
 from sqlalchemy.dialects.oracle.base import (
     OracleCompiler,
     OracleDialect,
     OracleExecutionContext,
 )
+from sqlalchemy.dialects.oracle.types import _OracleDate
 from sqlalchemy.engine import cursor as _cursor
 
 if TYPE_CHECKING:
@@ -46,6 +49,25 @@ def _coerce(key: str, value: str) -> Any:
     if key in _BOOL_ARGS:
         return value.strip().lower() in _TRUTHY
     return value
+
+
+class _SeerdbDate(_OracleDate):
+    """A `Date` column read back as a `date`, not a `datetime`.
+
+    This backend has no date-only type: a DATE always carries a time of day, so
+    the driver reads one back as a `datetime` — correctly, since that is what
+    the column holds. A column the schema declares as `Date` is asking for the
+    date part, so it is taken here.
+
+    The generic dialect leaves this to the driver, because the ones it ships
+    with are configured to do the narrowing themselves.
+    """
+
+    def result_processor(self, dialect, coltype):
+        def process(value):
+            return value.date() if value is not None else None
+
+        return process
 
 
 class SeerdbExecutionContext(OracleExecutionContext):
@@ -239,6 +261,9 @@ class SeerdbDialect(OracleDialect):
     # at the default, SQLAlchemy assumes the driver returns floats and installs
     # no processor either way, so a Float column came back holding a Decimal.
     supports_native_decimal = True
+
+    # As the base dialect's, plus the date narrowing above.
+    colspecs: ClassVar[dict] = {**_oracle_base.colspecs, sqltypes.Date: _SeerdbDate}
 
     # No SQL is generated differently from the base dialect, so cached
     # statements stay valid.
