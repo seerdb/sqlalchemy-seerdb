@@ -15,6 +15,10 @@ from sqlalchemy.dialects import registry
 
 registry.register('oracle.seerdb', 'sqlalchemy_seerdb.seerdb', 'SeerdbDialect')
 
+# Importing this registers the provisioning hooks the suite looks up by backend
+# name; without it the hooks are missing and whole classes error in setup.
+import sqlalchemy_seerdb.provision  # noqa: F401
+
 pytest.register_assert_rewrite('sqlalchemy.testing.assertions')
 
 from sqlalchemy.testing.plugin.pytestplugin import *

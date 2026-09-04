@@ -129,6 +129,44 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install .[test]
+      # SQLAlchemy's suite requires a second namespace called test_schema, which
+      # on this backend is a username, and the test account has to be able to
+      # create and drop tables inside it. Without it every test in
+      # ComponentReflectionTest errors in setup on "user does not exist" — 749 of
+      # them — because they share a fixture that builds tables there.
+      #
+      # The broad ANY-object grants below are deliberate and safe *here*: this
+      # container is created for one run and thrown away. Do not copy them onto
+      # a long-lived instance without narrowing them.
+      - name: Create the test_schema namespace
+        run: |
+          python - <<'PY'
+          import seerdb
+
+          conn = seerdb.connect(
+              host='localhost', port=1521, service_name='${{ matrix.db.service }}',
+              user='system', password='oracle',
+          )
+          cur = conn.cursor()
+          statements = [
+              'CREATE USER test_schema IDENTIFIED BY test_schema',
+              'GRANT CREATE SESSION TO test_schema',
+              'ALTER USER test_schema QUOTA UNLIMITED ON USERS',
+              'GRANT CREATE ANY TABLE, DROP ANY TABLE, SELECT ANY TABLE, '
+              'INSERT ANY TABLE, UPDATE ANY TABLE, DELETE ANY TABLE, '
+              'CREATE ANY INDEX, DROP ANY INDEX, CREATE ANY VIEW, '
+              'DROP ANY VIEW, CREATE ANY SEQUENCE, DROP ANY SEQUENCE, '
+              'COMMENT ANY TABLE, ANALYZE ANY TO pyo',
+          ]
+          for statement in statements:
+              try:
+                  cur.execute(statement)
+              except Exception as exc:  # already present from a previous attempt
+                  print(f'skipped: {statement[:40]}... -> {exc}')
+          conn.commit()
+          conn.close()
+          print('test_schema ready')
+          PY
       - name: Run the compliance suite against ${{ matrix.db.name }}
         continue-on-error: true
         run: >-

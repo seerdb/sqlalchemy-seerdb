@@ -39,13 +39,53 @@ do not reach.
 
 ## Status
 
-Early. Connections, Core `select`, DDL and parameter binding work against live
-servers. Reflection is **blocked** on a driver bug where a `NULL` literal column
-desyncs the row decoder, which the reflection query trips over — see
-[seerdb#682](https://github.com/seerdb/seerdb/issues/682).
+Early. Connections, Core `select`, DDL, parameter binding and reflection all
+work against live servers — `has_table`, `get_columns`, `get_pk_constraint` and
+`autoload_with` round-trip.
 
-The next milestone is SQLAlchemy's dialect compliance suite, which upstream names
-as the target for third-party dialects.
+The current target is SQLAlchemy's dialect compliance suite. Progress is tracked
+under the [SQLAlchemy conformance](https://github.com/seerdb/sqlalchemy-seerdb/milestone/1)
+milestone.
+
+## Running the tests
+
+The suite is SQLAlchemy's dialect compliance suite, which upstream names as the
+target for third-party dialects. It is entirely live-database driven — there is
+no offline mode — so point it at a server:
+
+```bash
+pytest --dburi "oracle+seerdb://user:password@host:1521/?service_name=XE"
+```
+
+Run it from the repository root. `test.cfg` has to be found in the working
+directory: SQLAlchemy's plugin reads it with configparser and does not look at
+`pyproject.toml`.
+
+### One setup step, and it needs a DBA
+
+The suite expects a second namespace called `test_schema`, which on this backend
+is a **username**, and the test account must be able to create and drop tables
+inside it. Skipping this does not fail a handful of tests — every test in
+`ComponentReflectionTest` errors in setup, because they share a fixture that
+builds tables there.
+
+The test account cannot create it (`ORA-01031`), so run this as a DBA once:
+
+```sql
+CREATE USER test_schema IDENTIFIED BY test_schema;
+GRANT CREATE SESSION TO test_schema;
+ALTER USER test_schema QUOTA UNLIMITED ON USERS;
+
+-- so the test account can build and drop the fixtures inside that schema
+GRANT CREATE ANY TABLE, DROP ANY TABLE, SELECT ANY TABLE, INSERT ANY TABLE,
+      UPDATE ANY TABLE, DELETE ANY TABLE, CREATE ANY INDEX, DROP ANY INDEX,
+      CREATE ANY VIEW, DROP ANY VIEW, CREATE ANY SEQUENCE, DROP ANY SEQUENCE,
+      COMMENT ANY TABLE, ANALYZE ANY TO <your test user>;
+```
+
+Those `ANY` privileges are broad. They are fine on a throwaway test instance —
+CI creates the namespace in a container it discards — but narrow them before
+granting on anything long-lived.
 
 ## Connect string
 
