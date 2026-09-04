@@ -73,15 +73,11 @@ jobs:
   # dialects, so it is what this repo tests against. It is entirely
   # live-database driven, with no offline mode, hence the service container.
   #
-  # NOT GATING, on purpose. The dialect is early. A full run against 11g, which
-  # is what this job does, was 166 passed / 175 failed / 917 errors in about six
-  # minutes. Nearly all of those errors are one root cause: reflection is broken
-  # by a driver bug where a NULL literal column desyncs the row decoder
-  # (seerdb#682), and the reflection query selects two such columns, so every
-  # fixture that builds or inspects a table fails in setup. Excluding reflection
-  # the same suite is 177 passed / 175 failed / 120 errors, which is the honest
-  # picture of the dialect itself. Expect the error count to collapse when 682
-  # is fixed.
+  # NOT GATING, on purpose — the dialect is early and the suite is a progress
+  # report, not a contract. Two things had to be true before the numbers meant
+  # anything at all, and both are recent: the driver had to stop desyncing on a
+  # NULL literal column (seerdb#682), and this job had to create the test_schema
+  # namespace below, without which a whole test class dies in setup.
   #
   # A curated -k allowlist was tried and rejected: the suite's fixtures
   # interact, so classes that pass alone error inside a subset and vice versa.
@@ -129,6 +125,13 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install .[test]
+      # Test against the driver's current master, not the last release. The
+      # dialect and the driver are being brought up together — fixes the suite
+      # depends on land in the driver first and are only released later — so
+      # pinning to the published version would report stale results. Drop this
+      # once a release contains what the suite needs.
+      - name: Use the driver's current master
+        run: pip install --upgrade "seerdb @ git+https://github.com/seerdb/seerdb@master"
       # SQLAlchemy's suite requires a second namespace called test_schema, which
       # on this backend is a username, and the test account has to be able to
       # create and drop tables inside it. Without it every test in
