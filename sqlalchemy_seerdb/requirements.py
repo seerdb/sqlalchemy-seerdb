@@ -79,6 +79,57 @@ class Requirements(SuiteRequirements):
         """
         return exclusions.closed()
 
+    @property
+    def empty_strings_varchar(self):
+        """An empty string is not a value here — it is NULL.
+
+        Verified: inserting `''` into a VARCHAR2 and reading it back gives NULL,
+        and `v IS NULL` is true. This is the backend's own rule about the empty
+        string, not a driver or dialect choice, so a test that round-trips one
+        cannot apply.
+        """
+        return exclusions.closed()
+
+    @property
+    def empty_strings_text(self):
+        """The same rule, verified separately on an unbounded text column."""
+        return exclusions.closed()
+
+    @property
+    def unbounded_varchar(self):
+        """A bounded character column must say how long it is.
+
+            CREATE TABLE t (one VARCHAR2)
+            ORA-00906: missing left parenthesis
+
+        An unbounded *text* column is a different type and does work — see the
+        CLOB round trips, which pass — so this is specifically about declaring a
+        varchar with no length.
+        """
+        return exclusions.closed()
+
+    @property
+    def parens_in_union_contained_select_wo_limit_offset(self):
+        """A parenthesised branch of a UNION cannot carry its own ORDER BY.
+
+            (SELECT id FROM t ORDER BY id) UNION (SELECT id FROM t ORDER BY id)
+            ORA-00907: missing right parenthesis
+
+        SQLAlchemy's own requirement documents this as failing on this backend:
+        without a LIMIT or OFFSET nothing wraps the branch in a subquery, and
+        the bare form is a syntax error here.
+        """
+        return exclusions.closed()
+
+    @property
+    def parens_in_union_contained_select_w_limit_offset(self):
+        """The same with a row limit, which is refused just as firmly.
+
+        (SELECT ... ORDER BY id FETCH FIRST 1 ROWS ONLY) UNION (...)
+        ORA-00900: invalid SQL statement
+        """
+        return exclusions.closed()
+
     # --- things it can do that the suite is conservative about ------------
 
     @property
