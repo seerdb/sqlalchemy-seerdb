@@ -23,7 +23,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy.dialects.oracle.base import OracleDialect
+from sqlalchemy import util
+from sqlalchemy.dialects.oracle.base import OracleCompiler, OracleDialect
 
 if TYPE_CHECKING:
     from sqlalchemy.engine.url import URL
@@ -42,11 +43,81 @@ def _coerce(key: str, value: str) -> Any:
     return value
 
 
+class SeerdbCompiler(OracleCompiler):
+    """Renders bind names this server will actually accept.
+
+    The server is far pickier about bind names than SQL generally is. A name may
+    not start with a digit or an underscore, and a good many punctuation
+    characters are rejected outright with "invalid host/bind variable name" —
+    which is what a name like ``/slashes/`` or ``q?marks`` produces. Names like
+    those are not contrived: they come from column names, and a caller who names
+    a column that way gets a bind named after it.
+
+    Two mechanisms are needed, because neither covers the other:
+
+    * an escape map, used for the expanded parameters of an ``IN`` clause, where
+      quoting is not available; and
+    * quoting the name outright everywhere else, which also handles reserved
+      words and the illegal leading characters.
+    """
+
+    # The generic compiler escapes eight characters. These three more are
+    # rejected by this server and have to travel as an escape rather than a
+    # quoted name, because an expanded parameter cannot be quoted.
+    bindname_escape_characters = util.immutabledict(
+        {
+            '%': 'P',
+            '(': 'A',
+            ')': 'Z',
+            ':': 'C',
+            '.': 'C',
+            '[': 'C',
+            ']': 'C',
+            ' ': 'C',
+            '\\': 'C',
+            '/': 'C',
+            '?': 'C',
+        }
+    )
+
+    def bindparam_string(self, name, **kw):
+        """Rewrite a bind name into one the server accepts.
+
+        Escaping only, never quoting. The quoted form `:"name"` is what the
+        bundled dialects lean on, but this driver does not parse it — the
+        placeholder goes unrecognised and the value is reported as never
+        provided. Escaping covers the same ground and works everywhere,
+        including the expanded parameters of an `IN` clause, where quoting is
+        not available anyway.
+
+        The original name is recorded in `escaped_from` so the value still
+        binds to it.
+        """
+        if not kw.get('escaped_from'):
+            translated = name
+            if self._bind_translate_re.search(name):
+                translated = self._bind_translate_re.sub(
+                    lambda m: self._bind_translate_chars[m.group(0)], name
+                )
+            # Escaping the characters is not the whole job. A reserved word
+            # (`desc`) and an illegal leading character (a digit or an
+            # underscore) are both still rejected, and both are what quoting
+            # would normally have solved. A prefix does the same work: the name
+            # only has to be unique and legal.
+            if self.preparer._bindparam_requires_quotes(translated):
+                translated = 'D' + translated
+            if translated != name:
+                kw['escaped_from'] = name
+                name = translated
+        return super().bindparam_string(name, **kw)
+
+
 class SeerdbDialect(OracleDialect):
     """SQLAlchemy dialect driving the seerdb DBAPI."""
 
     name = 'oracle'
     driver = 'seerdb'
+    statement_compiler = SeerdbCompiler
 
     # No SQL is generated differently from the base dialect, so cached
     # statements stay valid.
