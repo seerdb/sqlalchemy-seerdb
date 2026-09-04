@@ -43,3 +43,8 @@ line-length = 88
 
 [tool.ruff.format]
 quote-style = "single"
+
+[tool.pytest.ini_options]
+addopts = "--tb=short"
+testpaths = ["test"]
+python_files = ["test_*.py"]

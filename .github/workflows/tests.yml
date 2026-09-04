@@ -1,0 +1,136 @@
+# SPDX-FileCopyrightText: © 2026 Peter Lemenkov
+# SPDX-License-Identifier: CC0-1.0
+
+name: Tests
+
+on:
+  push:
+    branches: [master]
+    paths-ignore:
+      - '.github/dependabot.yml'
+      - '.gitignore'
+      - 'LICENSE'
+      - 'LICENSES/**'
+      - 'README.md'
+  pull_request:
+    branches: [master]
+    paths-ignore:
+      - '.github/dependabot.yml'
+      - '.gitignore'
+      - 'LICENSE'
+      - 'LICENSES/**'
+      - 'README.md'
+
+# Cancel a superseded run when a new commit lands on the same ref, so rapid
+# pushes don't stack up against the Actions budget.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # The gating job, and deliberately the only one. It needs no database, so it
+  # is fast and deterministic. What it protects is the thing that would silently
+  # break every user: the entry point. If that regresses, `oracle+seerdb://`
+  # stops resolving and nothing else in this repo matters.
+  package:
+    name: Package (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      matrix:
+        python-version: ["3.10", "3.11", "3.12", "3.13", "3.14"]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ matrix.python-version }}
+      # Install the built distribution rather than running from the source
+      # tree, so the entry point is exercised the way a user's install
+      # resolves it.
+      - run: pip install .
+      - name: Dialect resolves from its entry point
+        run: |
+          python - <<'PY'
+          from sqlalchemy.engine import make_url
+
+          url = make_url('oracle+seerdb://u:p@h:1521/?service_name=XE&timeout=5000')
+          dialect = url.get_dialect()
+          assert dialect.__name__ == 'SeerdbDialect', dialect
+          assert (dialect.name, dialect.driver) == ('oracle', 'seerdb')
+
+          # The URL has to reach the driver as its own keywords, with the
+          # non-string query arguments coerced.
+          args = dialect().create_connect_args(url)[1]
+          assert args == {
+              'host': 'h', 'port': 1521, 'user': 'u', 'password': 'p',
+              'service_name': 'XE', 'timeout': 5000,
+          }, args
+          assert isinstance(args['timeout'], int), 'query args must be coerced'
+          print('entry point OK:', dialect.__module__ + '.' + dialect.__name__)
+          PY
+
+  # SQLAlchemy names its dialect compliance suite as the target for third-party
+  # dialects, so it is what this repo tests against. It is entirely
+  # live-database driven, with no offline mode, hence the service container.
+  #
+  # NOT GATING, on purpose. The dialect is early. A full run against 11g, which
+  # is what this job does, was 166 passed / 175 failed / 917 errors in about six
+  # minutes. Nearly all of those errors are one root cause: reflection is broken
+  # by a driver bug where a NULL literal column desyncs the row decoder
+  # (seerdb#682), and the reflection query selects two such columns, so every
+  # fixture that builds or inspects a table fails in setup. Excluding reflection
+  # the same suite is 177 passed / 175 failed / 120 errors, which is the honest
+  # picture of the dialect itself. Expect the error count to collapse when 682
+  # is fixed.
+  #
+  # A curated -k allowlist was tried and rejected: the suite's fixtures
+  # interact, so classes that pass alone error inside a subset and vice versa.
+  # Results are order-dependent, which would make an allowlist flake rather
+  # than protect anything. This job reports progress; the job above is the
+  # gate. Turn continue-on-error off once the suite is genuinely green.
+  compliance:
+    name: Compliance suite (${{ matrix.db.name }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        # Two tiers rather than every one, to stay inside the Actions budget:
+        # the oldest server this dialect reaches at all, and a current one.
+        db:
+          - name: "11g"
+            image: "gvenzl/oracle-xe:11-slim"
+            service: "XE"
+          - name: "23ai Free"
+            image: "gvenzl/oracle-free:23-slim"
+            service: "FREEPDB1"
+    services:
+      oracle:
+        image: ${{ matrix.db.image }}
+        env:
+          ORACLE_PASSWORD: oracle
+          APP_USER: pyo
+          APP_USER_PASSWORD: pyo123
+        ports:
+          - 1521:1521
+        # The image ships healthcheck.sh; wait for first-boot setup before the
+        # test step. The shared-memory bump keeps the newer instance from
+        # OOM-stalling partway through the suite.
+        options: >-
+          --health-cmd healthcheck.sh
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 40
+          --health-start-period 90s
+          --shm-size=2g
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - run: pip install .[test]
+      - name: Run the compliance suite against ${{ matrix.db.name }}
+        continue-on-error: true
+        run: >-
+          python -m pytest -q --tb=short
+          --dburi "oracle+seerdb://pyo:pyo123@localhost:1521/?service_name=${{ matrix.db.service }}"
