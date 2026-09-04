@@ -50,6 +50,21 @@ class Requirements(SuiteRequirements):
         """
         return exclusions.closed()
 
+    @property
+    def symbol_names_w_double_quote(self):
+        """A double quote cannot appear in an identifier at all.
+
+        Not a quoting bug on our side — the generated DDL is correct, doubling
+        the inner quote the way SQL says to. The server rejects it anyway:
+
+            CREATE TABLE "quote "" two" (...)
+            ORA-25716: The identifier contains a double quotation mark (")
+
+        A single quote in an identifier is fine, so this is specifically about
+        the double quote.
+        """
+        return exclusions.closed()
+
     # --- things it can do that the suite is conservative about ------------
 
     @property
