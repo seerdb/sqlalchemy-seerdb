@@ -1,0 +1,45 @@
+# SPDX-FileCopyrightText: 2026 Peter Lemenkov <lemenkov@gmail.com>
+# SPDX-License-Identifier: MIT
+
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sqlalchemy-seerdb"
+version = "0.1.0.dev0"
+description = "SQLAlchemy dialect for the seerdb driver"
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSES/MIT.txt"]
+requires-python = ">=3.10"
+authors = [{ name = "Peter Lemenkov", email = "lemenkov@gmail.com" }]
+keywords = ["sqlalchemy", "dialect", "database", "dbapi"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Topic :: Database",
+]
+dependencies = ["SQLAlchemy>=2.0", "seerdb>=2.4.0"]
+
+[project.urls]
+Homepage = "https://github.com/seerdb/sqlalchemy-seerdb"
+Source = "https://github.com/seerdb/sqlalchemy-seerdb"
+
+# How SQLAlchemy finds the dialect: this is what makes the URL prefix
+# `oracle+seerdb://` resolve to the class below.
+[project.entry-points."sqlalchemy.dialects"]
+"oracle.seerdb" = "sqlalchemy_seerdb.seerdb:SeerdbDialect"
+
+[project.optional-dependencies]
+test = ["pytest>=7"]
+
+[tool.setuptools.packages.find]
+include = ["sqlalchemy_seerdb*"]
+
+[tool.ruff]
+line-length = 88
+
+[tool.ruff.format]
+quote-style = "single"
