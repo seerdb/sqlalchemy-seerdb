@@ -65,6 +65,20 @@ class Requirements(SuiteRequirements):
         """
         return exclusions.closed()
 
+    @property
+    def expressions_against_unbounded_text(self):
+        """An unbounded text column cannot appear in a WHERE clause.
+
+        Verified: comparing one is refused outright.
+
+            select 1 from t where clob_column = 'x'
+            ORA-22848: cannot use CLOB type as comparison key
+
+        Such a column has to be converted first, which is a different query
+        from the one the suite writes, so these comparisons cannot apply.
+        """
+        return exclusions.closed()
+
     # --- things it can do that the suite is conservative about ------------
 
     @property
