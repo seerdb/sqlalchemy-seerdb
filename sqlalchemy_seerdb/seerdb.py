@@ -73,9 +73,11 @@ class SeerdbExecutionContext(OracleExecutionContext):
                 dbapi_type = impl.get_dbapi_type(self.dialect.loaded_dbapi)
             except (AttributeError, NotImplementedError):
                 dbapi_type = None
-            # A float column maps to the same numeric type as everything else,
-            # and the driver hands that back as a Decimal. Binding the receiver
-            # as a float instead keeps the value the type the query asked for.
+            # Every numeric column maps to the same database type, so the
+            # receiver has to be bound with the Python type the query asked for
+            # or the value comes back as whichever one that database type
+            # decodes to. The driver honours the request (seerdb#688), so this
+            # is all it takes.
             try:
                 if sqla_type.python_type is float:
                     return float
@@ -110,37 +112,27 @@ class SeerdbExecutionContext(OracleExecutionContext):
         return [self.out_parameters[name].getvalue() for name in names]
 
     def fetchall_for_returning(self, cursor):
-        """The returned values, shaped as rows."""
+        """The returned values, shaped as rows.
+
+        A receiver reports what it received as a list, one entry per row the
+        statement affected, so even a single-row statement arrives wrapped. An
+        array execute goes further and reports per iteration, which is read one
+        position at a time and concatenated: iterations come back in the order
+        the rows were submitted, which is the parameter order the caller can ask
+        to have the rows in.
+        """
         if not self.out_parameters:
             return []
+        iterations = len(self.parameters) if self.executemany else 1
         columns = []
-        for index, entry in enumerate(self.compiled._result_columns):
-            value = self.out_parameters[f'ret_{index}'].getvalue()
-            # A receiver reports its value as a list, one entry per affected
-            # row, so a single-row statement still arrives wrapped.
-            values = value if isinstance(value, list) else [value]
-            columns.append([self._coerce_returned(entry, v) for v in values])
+        for index in range(len(self.compiled._result_columns)):
+            receiver = self.out_parameters[f'ret_{index}']
+            values: list = []
+            for iteration in range(iterations):
+                received = receiver.getvalue(iteration)
+                values += received if isinstance(received, list) else [received]
+            columns.append(values)
         return list(zip(*columns)) if columns else []
-
-    @staticmethod
-    def _coerce_returned(entry, value):
-        """Give a returned value the type the query asked for.
-
-        The driver decides a numeric value's Python type from the value rather
-        than from the receiver it was given, so a float column arrives as a
-        Decimal even when the receiver asked for a float (seerdb#688). Comparing
-        that against what was inserted then fails on the type. Drop this once
-        the driver honours the requested type.
-        """
-        if value is None:
-            return value
-        try:
-            wanted = entry.type.python_type
-        except (AttributeError, NotImplementedError):
-            return value
-        if wanted is float and not isinstance(value, float):
-            return float(value)
-        return value
 
     def post_exec(self):
         compiled = self.compiled
@@ -235,9 +227,18 @@ class SeerdbDialect(OracleDialect):
     insert_returning = True
     update_returning = True
     delete_returning = True
-    # Separately broken in the driver, which corrupts the wire protocol for it
-    # past one row (seerdb#687).
-    insert_executemany_returning = False
+    # An array insert reports its returned values per iteration, in the order
+    # the rows were submitted, so the rows can be handed back in parameter order
+    # (seerdb#687).
+    insert_executemany_returning = True
+    insert_executemany_returning_sort_by_parameter_order = True
+
+    # The driver hands a NUMBER back as a Decimal, not a float. Saying so is
+    # what makes SQLAlchemy convert: a column declared Float asks for a float and
+    # gets one, and a Numeric column is left as the Decimal it already is. Left
+    # at the default, SQLAlchemy assumes the driver returns floats and installs
+    # no processor either way, so a Float column came back holding a Decimal.
+    supports_native_decimal = True
 
     # No SQL is generated differently from the base dialect, so cached
     # statements stay valid.
