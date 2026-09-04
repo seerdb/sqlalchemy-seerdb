@@ -130,8 +130,18 @@ jobs:
       # depends on land in the driver first and are only released later — so
       # pinning to the published version would report stale results. Drop this
       # once a release contains what the suite needs.
+      #
+      # --force-reinstall, not --upgrade: master carries the same version string
+      # as the last release until a release bumps it, so pip compares the two,
+      # sees no change and silently keeps the published wheel. That is not
+      # hypothetical — it happened, and the giveaway was a run whose numbers were
+      # identical to the previous one.
       - name: Use the driver's current master
-        run: pip install --upgrade "seerdb @ git+https://github.com/seerdb/seerdb@master"
+        run: |
+          pip install --force-reinstall --no-deps \
+            "seerdb @ git+https://github.com/seerdb/seerdb@master"
+          python -c "import seerdb, inspect, pathlib; \
+            print('driver from:', pathlib.Path(inspect.getfile(seerdb)).parent)"
       # SQLAlchemy's suite requires a second namespace called test_schema, which
       # on this backend is a username, and the test account has to be able to
       # create and drop tables inside it. Without it every test in
