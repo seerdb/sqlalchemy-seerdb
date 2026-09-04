@@ -1,0 +1,61 @@
+# SPDX-FileCopyrightText: © 2026 Peter Lemenkov
+# SPDX-License-Identifier: CC0-1.0
+
+name: CodeQL
+
+on:
+  push:
+    branches: [master]
+    # Docs-only changes have no code for CodeQL to analyse — skip them.
+    paths-ignore:
+      - '.github/dependabot.yml'
+      - '.gitignore'
+      - 'LICENSE'
+      - 'LICENSES/**'
+      - 'README.md'
+  pull_request:
+    branches: [master]
+    paths-ignore:
+      - '.github/dependabot.yml'
+      - '.gitignore'
+      - 'LICENSE'
+      - 'LICENSES/**'
+      - 'README.md'
+  schedule:
+    # Weekly Monday 06:17 UTC — off the hour to dodge cron spikes.
+    - cron: '17 6 * * 1'
+
+permissions:
+  contents: read
+
+jobs:
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      packages: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - language: python
+            build-mode: none
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v4.37.9
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build-mode }}
+          # Security queries only. ruff (F/W/I) and mypy already own import
+          # hygiene, unused imports, and style, so the extra `-and-quality`
+          # queries (py/cyclic-import, py/unused-import, py/import-and-import-from)
+          # are pure duplicate noise here — and they re-anchor on every reformat.
+          queries: security-extended
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v4.37.9
+        with:
+          category: '/language:${{ matrix.language }}'

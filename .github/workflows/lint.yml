@@ -1,0 +1,40 @@
+# SPDX-FileCopyrightText: © 2026 Peter Lemenkov
+# SPDX-License-Identifier: CC0-1.0
+
+name: Lint
+
+on:
+  push:
+    branches: [master]
+    paths-ignore:
+      - '.github/dependabot.yml'
+      - '.gitignore'
+      - 'LICENSE'
+      - 'LICENSES/**'
+      - 'README.md'
+  pull_request:
+    branches: [master]
+    paths-ignore:
+      - '.github/dependabot.yml'
+      - '.gitignore'
+      - 'LICENSE'
+      - 'LICENSES/**'
+      - 'README.md'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ruff:
+    name: ruff (lint + format)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.10"
+      - run: pip install ruff
+      - run: ruff check sqlalchemy_seerdb test
+      - run: ruff format --check sqlalchemy_seerdb test
