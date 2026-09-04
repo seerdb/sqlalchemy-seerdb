@@ -164,7 +164,13 @@ jobs:
           statements = [
               'CREATE USER test_schema IDENTIFIED BY test_schema',
               'GRANT CREATE SESSION TO test_schema',
-              'ALTER USER test_schema QUOTA UNLIMITED ON USERS',
+              # Storage for an object is charged to the schema that owns it, so
+              # the quota has to be test_schema's. A quota on USERS alone is not
+              # enough: on the older image a new user defaults to the SYSTEM
+              # tablespace, and every CREATE TABLE then fails with ORA-01950 —
+              # which is what made that tier look far worse than the newer one.
+              'ALTER USER test_schema DEFAULT TABLESPACE USERS',
+              'GRANT UNLIMITED TABLESPACE TO test_schema',
               'GRANT CREATE ANY TABLE, DROP ANY TABLE, SELECT ANY TABLE, '
               'INSERT ANY TABLE, UPDATE ANY TABLE, DELETE ANY TABLE, '
               'CREATE ANY INDEX, DROP ANY INDEX, CREATE ANY VIEW, '
