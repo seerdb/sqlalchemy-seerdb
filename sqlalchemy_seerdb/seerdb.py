@@ -119,6 +119,19 @@ class SeerdbDialect(OracleDialect):
     driver = 'seerdb'
     statement_compiler = SeerdbCompiler
 
+    # This backend does not return a result set for RETURNING — it returns the
+    # values through OUT binds — and this dialect has no bridge for that yet
+    # (#6). Claiming the capability is worse than not having it: SQLAlchemy
+    # would generate RETURNING for ordinary ORM inserts and then fail at
+    # runtime on a result that carries no rows. Declared off so it takes the
+    # working path instead. Turn back on with #6.
+    insert_returning = False
+    update_returning = False
+    delete_returning = False
+    # Separately broken in the driver, which corrupts the wire protocol for it
+    # past one row (seerdb#687).
+    insert_executemany_returning = False
+
     # No SQL is generated differently from the base dialect, so cached
     # statements stay valid.
     supports_statement_cache = True
