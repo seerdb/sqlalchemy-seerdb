@@ -133,6 +133,37 @@ class Requirements(SuiteRequirements):
     # --- things it can do that the suite is conservative about ------------
 
     @property
+    def temp_table_names(self):
+        """Temporary tables can be listed by name.
+
+        Off by default in the suite. This backend's temporary tables are
+        *global*: the definition is a permanent, ordinary catalog entry — only
+        the rows are session-private — so listing them is no different from
+        listing any other table. Verified: a `CREATE GLOBAL TEMPORARY TABLE`
+        appears in `user_tables` with `TEMPORARY = 'Y'`, and
+        `Inspector.get_temp_table_names()` returns it, while `get_table_names()`
+        correctly leaves it out.
+
+        Saying so matters beyond the one test that asks directly. Left closed,
+        the suite still *creates* its temporary table — that is governed by the
+        separate `temp_table_reflection`, which is on — but then expects
+        reflection not to mention it. Reflection here does mention it, correctly,
+        and the disagreement was the single largest source of failures in the
+        suite: 72 of them, across ten reflection tests that have nothing to do
+        with temporary tables as such.
+        """
+        return exclusions.open()
+
+    @property
+    def has_temp_table(self):
+        """A single temporary table can be checked by name.
+
+        Follows from the above and verified the same way:
+        `Inspector.has_table()` on a global temporary table returns True.
+        """
+        return exclusions.open()
+
+    @property
     def timestamp_microseconds(self):
         """The timestamp type keeps sub-second precision.
 
