@@ -342,6 +342,11 @@ class SeerdbDialect(OracleDialect):
         # query-string form work.
         if url.database:
             options.setdefault('service_name', url.database)
+        # The driver commits every statement unless told otherwise, which would
+        # make SQLAlchemy's transactions, and its rollback, mean nothing. The
+        # DBAPI contract SQLAlchemy builds on is autocommit off, so that is the
+        # default here; ``?autocommit=true`` in the URL still turns it on.
+        options['autocommit'] = False
         for key, value in url.query.items():
             # A repeated key arrives as a tuple; the driver takes one value.
             options[key] = _coerce(
