@@ -92,10 +92,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # The release a user installs and the driver's current master: the
-        # first is what this dialect is released against, the second is what
-        # it will be released against next.
-        seerdb: ["latest", "master"]
+        # The release a user installs (PyPI), the same release resolved from
+        # the driver's newest git tag (immune to PyPI's index lag), and the
+        # driver's current master: what this dialect is released against, and
+        # what it will be released against next.
+        seerdb: ["latest", "tag", "master"]
     uses: ./.github/workflows/compliance.yml
     with:
       seerdb: ${{ matrix.seerdb }}

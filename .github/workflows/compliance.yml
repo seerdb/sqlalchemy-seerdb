@@ -11,7 +11,7 @@ on:
   workflow_call:
     inputs:
       seerdb:
-        description: "latest | master | a released version such as 2.5.0"
+        description: "latest (PyPI) | tag (seerdb's newest git tag) | master | a released version such as 2.5.0"
         required: true
         type: string
 
@@ -61,8 +61,18 @@ jobs:
       - run: pip install .[test]
       # A version pins the released driver to exactly that release.
       - name: Pin the released driver
-        if: inputs.seerdb != 'latest' && inputs.seerdb != 'pypi' && inputs.seerdb != 'master'
+        if: inputs.seerdb != 'latest' && inputs.seerdb != 'pypi' && inputs.seerdb != 'master' && inputs.seerdb != 'tag'
         run: pip install "seerdb==${{ inputs.seerdb }}"
+      # `tag` installs the driver at its newest git tag: the same code as the
+      # newest release, resolved from the repository rather than from PyPI's
+      # index, which lags a publish by minutes.
+      - name: Use the driver's newest tag
+        if: inputs.seerdb == 'tag'
+        run: |
+          TAG=$(git ls-remote --tags --refs https://github.com/seerdb/seerdb \
+                | sed 's#.*/##' | grep -E '^v?[0-9]+(\.[0-9]+)+$' | sort -V | tail -1)
+          echo "newest seerdb tag: $TAG"
+          pip install --force-reinstall --no-deps "seerdb @ git+https://github.com/seerdb/seerdb@$TAG"
       # `master` swaps in the driver's current master.
       #
       # --force-reinstall, not --upgrade: master carries the same version string

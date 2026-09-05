@@ -107,11 +107,12 @@ to make a run green.
 Three workflows, one job definition:
 
 - `compliance.yml` is reusable and takes `seerdb`: `latest` (the release a
-  user installs, whatever the dependency floor resolves to), `master` (the
-  driver's git master) or a pinned release such as `2.5.0`.
-- `tests.yml` calls it for `latest` and `master` on every push and pull
-  request: the first is what the dialect is released against, the second is
-  the early warning for the next driver release.
+  user installs, whatever the dependency floor resolves to on PyPI), `tag`
+  (the driver's newest git tag, the same release without PyPI's index lag),
+  `master` (the driver's git master) or a pinned release such as `2.5.0`.
+- `tests.yml` calls it for `latest`, `tag` and `master` on every push and
+  pull request: the first two are what the dialect is released against, the
+  third is the early warning for the next driver release.
 - `released.yml`, "SQLAlchemy vs released seerdb", runs it on demand from the
   Actions tab (version box, default `latest`) and weekly.
 

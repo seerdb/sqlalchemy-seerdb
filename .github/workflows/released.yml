@@ -12,7 +12,7 @@ on:
   workflow_dispatch:
     inputs:
       seerdb:
-        description: "latest, or a released version such as 2.5.0"
+        description: "latest (PyPI), tag (newest git tag), or a released version such as 2.5.0"
         required: false
         default: "latest"
         type: string
