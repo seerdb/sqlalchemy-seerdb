@@ -1,0 +1,107 @@
+<!--
+SPDX-FileCopyrightText: 2026 Peter Lemenkov <lemenkov@gmail.com>
+SPDX-License-Identifier: MIT
+-->
+
+# Notes for coding agents
+
+This file collects repeatable procedures for automated / AI agents working
+on `sqlalchemy-seerdb`. It mirrors the driver's own
+[`AGENTS.md`](https://github.com/seerdb/seerdb/blob/master/AGENTS.md); the
+driver's [`CONTRIBUTING.md`](https://github.com/seerdb/seerdb/blob/master/CONTRIBUTING.md)
+states the project's clean-room posture, which applies here too even though
+this package never touches the wire: it consumes seerdb's DB-API surface and
+nothing below it.
+
+## What this package is
+
+A SQLAlchemy dialect, `oracle+seerdb://`, on top of the seerdb driver. Its
+measure is SQLAlchemy's own dialect compliance suite (`test/test_suite.py`
+imports it whole), run against live Oracle servers. The suite is a progress
+report, not a gate: a run is read by its numbers and by *why* something fails,
+never by green alone.
+
+## Cutting a release
+
+Releases publish to PyPI automatically via GitHub Actions Trusted Publishing,
+triggered when the maintainer **pushes a version tag**. An agent's job is to
+*prepare* the release — never to tag it. The steps:
+
+1. **Bump the version** in `pyproject.toml` (`version = "x.y.z"`); it is the
+   only place the version lives.
+
+2. **Set the driver floor honestly.** If this release depends on driver fixes,
+   raise `seerdb>=…` in `pyproject.toml`'s `dependencies` to the first seerdb
+   release that carries them, and say which fixes in the commit message. A
+   dialect release must never require an unreleased driver.
+
+3. **Commit to `master`** (this repository does not use a fork→PR flow for
+   day-to-day changes) with the title `Release x.y.z`, and state the validation
+   status in the message: which tiers the compliance suite passed on, against
+   which driver version, and any known failures with their tickets.
+
+4. **Stop there. Do NOT create or push the tag.** The maintainer runs the
+   released-driver workflow (below), tags `x.y.z`, and the tag publishes.
+
+### Versioning
+
+Semantic versioning against the dialect's public surface: the URL scheme, the
+connect arguments it derives, the SQLAlchemy types it maps, and its
+`requirements.py` (what it claims the backend can do). A tighter driver floor
+alone is a **patch**; a new capability the suite now exercises is a **minor**;
+a change to what an existing URL or type does is a **major**.
+
+## Running the compliance suite
+
+```
+pytest --dburi "oracle+seerdb://user:password@host:1521/?service_name=XE"
+```
+
+- `test.cfg` is mandatory and must stay: SQLAlchemy's pytest plugin reads it
+  with `configparser`, not from `pyproject.toml`. Without it the whole module
+  fails to collect.
+- The suite needs a second schema named `test_schema` and a test user that can
+  reach into it (see the README's "one setup step" and the grant list in
+  `.github/workflows/compliance.yml`). Three environment traps found the hard
+  way, each of which looks like a driver bug until it is not:
+  - the test user's tables must live in the `USERS` tablespace, because the
+    Oracle dialect hides `SYSTEM`-tablespace tables from reflection and the
+    suite then never empties them between tests (rows "survive", ORA-00001);
+  - the test user needs `SELECT ANY SEQUENCE`, or sequences in `test_schema`
+    are invisible to reflection and get re-created (ORA-00955);
+  - the recycle bin refills with every run and one test insists the default
+    schema owns no sequences: purge it, or turn it off on a testbed.
+- Run classes with `-k`, never whole-suite `-k` expressions with `%` in them
+  (pytest mangles them), and add `-p no:randomly` when comparing two runs.
+- `SEERDB_SPY=1` with `-s` prints one stderr line per execute, commit and
+  rollback the driver receives, with the connection identity and rowcount
+  (`test/conftest.py`). Use it when a failure will not reproduce locally: the
+  suite swallows some of its own errors (the per-test DELETE among them) and
+  prints them from a passing test's teardown, which pytest never shows.
+
+### `requirements.py`
+
+`sqlalchemy_seerdb/requirements.py` tells the suite what the backend can do.
+Open a requirement only after verifying it live on the tier it claims; close
+one with the reason in a comment. Gate on the server version through
+`config.db.dialect.server_version_info` when a capability starts at a release
+(identity columns and therefore `autoincrement_insert` start at 12c), so the
+tests below it skip with the reason instead of failing. Never deselect tests
+to make a run green.
+
+## CI
+
+Three workflows, one job definition:
+
+- `compliance.yml` is reusable and takes `seerdb`: `latest` (the release a
+  user installs, whatever the dependency floor resolves to), `master` (the
+  driver's git master) or a pinned release such as `2.5.0`.
+- `tests.yml` calls it for `latest` and `master` on every push and pull
+  request: the first is what the dialect is released against, the second is
+  the early warning for the next driver release.
+- `released.yml`, "SQLAlchemy vs released seerdb", runs it on demand from the
+  Actions tab (version box, default `latest`) and weekly.
+
+Right after a driver release, a `latest` leg can fail with "no matching
+distribution" while PyPI's index propagates; rerun it before reading anything
+into it.
