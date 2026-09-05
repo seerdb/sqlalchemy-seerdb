@@ -102,6 +102,26 @@ one with the reason in a comment. Gate on the server version through
 tests below it skip with the reason instead of failing. Never deselect tests
 to make a run green.
 
+## Compatibility contract
+
+The driver and this dialect release independently, so each one's suite says
+what the other may rely on:
+
+- **This dialect must pass against the released driver**, whatever its
+  dependency floor resolves to: the `latest` and `tag` legs, and the
+  released-driver workflow. Those are gating.
+- **Against the driver's `master` the run is informational**, never gating.
+  A failure there is either a driver regression, to be raised on the driver's
+  side, or a dialect change that has to wait for the next driver release.
+- **The driver, for its part, must pass this dialect's newest release** (its
+  `SQLAlchemy` workflow checks out this repository's newest tag). A driver
+  change that breaks the released dialect fails there, on the driver's side.
+- Both masters are paired by this repository's `master` leg; it is the early
+  warning for the next pair of releases, not a gate for either.
+
+Release order follows: the driver releases first, then this dialect raises
+its `seerdb>=` floor and releases.
+
 ## CI
 
 Three workflows, one job definition:
@@ -111,8 +131,9 @@ Three workflows, one job definition:
   (the driver's newest git tag, the same release without PyPI's index lag),
   `master` (the driver's git master) or a pinned release such as `2.5.0`.
 - `tests.yml` calls it for `latest`, `tag` and `master` on every push and
-  pull request: the first two are what the dialect is released against, the
-  third is the early warning for the next driver release.
+  pull request: the first two are what the dialect is released against and
+  gate, the third is the early warning for the next driver release and does
+  not.
 - `released.yml`, "SQLAlchemy vs released seerdb", runs it on demand from the
   Actions tab (version box, default `latest`) and weekly.
 - `releases.yml`, "Releases (dialect tag vs seerdb tag)", pairs this

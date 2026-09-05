@@ -169,8 +169,13 @@ jobs:
           conn.close()
           print('test_schema ready')
           PY
+      # Gating against a released driver (`latest`, `tag`, a version): the
+      # dialect must work with the driver its dependency floor resolves to.
+      # Informational against `master`: a failure there is either a driver
+      # regression, to be raised on the driver's side, or a dialect change that
+      # has to wait for the next driver release; neither may block this repo.
       - name: Run the compliance suite against ${{ matrix.db.name }}
-        continue-on-error: true
+        continue-on-error: ${{ inputs.seerdb == 'master' }}
         run: >-
           python -m pytest -q --tb=short -s
           --dburi "oracle+seerdb://pyo:pyo123@localhost:1521/?service_name=${{ matrix.db.service }}"
