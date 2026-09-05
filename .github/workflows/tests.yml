@@ -197,14 +197,18 @@ jobs:
                   cur.execute(statement)
               except Exception as exc:  # already present from a previous attempt
                   print(f'skipped: {statement[:40]}... -> {exc}')
+          # What the image was built with; the suite's Unicode tests depend on it.
+          cur.execute(
+              "SELECT parameter, value FROM nls_database_parameters "
+              "WHERE parameter IN ('NLS_CHARACTERSET', 'NLS_NCHAR_CHARACTERSET', 'NLS_LENGTH_SEMANTICS')"
+          )
+          print('database NLS:', cur.fetchall())
           conn.commit()
           conn.close()
           print('test_schema ready')
           PY
       - name: Run the compliance suite against ${{ matrix.db.name }}
         continue-on-error: true
-        env:
-          SEERDB_SPY: '1'
         run: >-
           python -m pytest -q --tb=short -s
           --dburi "oracle+seerdb://pyo:pyo123@localhost:1521/?service_name=${{ matrix.db.service }}"

@@ -232,3 +232,26 @@ class Requirements(SuiteRequirements):
         round-trips intact through a `TIMESTAMP(6)` column.
         """
         return exclusions.open()
+
+    # ----- what needs a 12c server -----
+
+    @staticmethod
+    def _has_identity_columns(config):
+        # The Oracle dialect renders an autoincrement column as an identity
+        # column, which the server has from 12c. Before that the column is a
+        # plain NUMBER, an INSERT that leaves it out fails with ORA-01400, and
+        # there is no other way to say "generate the key" short of a sequence
+        # plus trigger, which the suite does not model.
+        return config.db.dialect.server_version_info >= (12,)
+
+    @property
+    def autoincrement_insert(self):
+        return exclusions.only_if(
+            self._has_identity_columns, 'autoincrement needs identity columns (12c+)'
+        )
+
+    @property
+    def autoincrement_without_sequence(self):
+        return exclusions.only_if(
+            self._has_identity_columns, 'autoincrement needs identity columns (12c+)'
+        )
