@@ -15,7 +15,7 @@ on:
         required: true
         type: string
       dialect:
-        description: "checkout (the code being tested) | tag (this repository's newest git tag)"
+        description: "checkout (the code being tested) | tag (this repository's newest git tag) | pypi (its newest PyPI release, harness from the matching tag)"
         required: false
         default: "checkout"
         type: string
@@ -71,9 +71,22 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
+      # `dialect: pypi` tests this repository's newest PyPI release, the
+      # artifact a user installs. The wheel ships only the package, so the
+      # compliance harness (test/, conftest.py, the mandatory test.cfg) comes
+      # from the checkout at the tag matching the installed version, which is
+      # never installed from.
+      - name: Use this repository's newest PyPI release
+        if: inputs.dialect == 'pypi'
+        run: |
+          pip install "sqlalchemy-seerdb[test]"
+          VERSION=$(pip show sqlalchemy-seerdb | awk '/^Version:/{print $2}')
+          echo "newest sqlalchemy-seerdb release on PyPI: $VERSION"
+          git checkout -q "$VERSION"
       # `pip install .[test]` brings the released driver from PyPI, whatever the
       # dependency floor resolves to: that is what `latest` (or `pypi`) tests.
-      - run: pip install .[test]
+      - if: inputs.dialect != 'pypi'
+        run: pip install .[test]
       # A version pins the released driver to exactly that release.
       - name: Pin the released driver
         if: inputs.seerdb != 'latest' && inputs.seerdb != 'pypi' && inputs.seerdb != 'master' && inputs.seerdb != 'tag'
@@ -100,12 +113,15 @@ jobs:
         run: |
           pip install --force-reinstall --no-deps \
             "seerdb @ git+https://github.com/seerdb/seerdb@master"
-      - name: Which driver this leg runs
+      - name: Which driver and dialect this leg runs
         run: |
           python -c "import seerdb, inspect, pathlib; \
             print('driver', seerdb.__version__ if hasattr(seerdb, '__version__') else '?', \
                   'from:', pathlib.Path(inspect.getfile(seerdb)).parent)"
           pip show seerdb | grep -E '^(Version|Location)'
+          python -c "import sqlalchemy_seerdb, inspect, pathlib; \
+            print('dialect', sqlalchemy_seerdb.__version__, \
+                  'from:', pathlib.Path(inspect.getfile(sqlalchemy_seerdb)).parent)"
       # SQLAlchemy's suite requires a second namespace called test_schema, which
       # on this backend is a username, and the test account has to be able to
       # create and drop tables inside it. Without it every test in

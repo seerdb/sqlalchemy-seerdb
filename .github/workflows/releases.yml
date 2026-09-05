@@ -1,11 +1,14 @@
 # SPDX-FileCopyrightText: 2026 Peter Lemenkov <lemenkov@gmail.com>
 # SPDX-License-Identifier: MIT
 
-# Release against release: this dialect at its newest git tag against seerdb
-# at its newest git tag, the pairing a user gets who installs both. On demand
-# and weekly. The push/PR workflow tests the checkout instead, and the
-# released-driver workflow a chosen driver against the checkout.
-name: Releases (dialect tag vs seerdb tag)
+# Release against release, two ways. Tags: this dialect at its newest git tag
+# against seerdb at its newest git tag, resolved from the repositories and so
+# immune to PyPI's index lag. PyPI: this dialect's newest release on PyPI
+# against whatever seerdb its dependency floor resolves to there, the exact
+# pairing a user gets who installs both. On demand and weekly. The push/PR
+# workflow tests the checkout instead, and the released-driver workflow a
+# chosen driver against the checkout.
+name: Releases (tags, and PyPI)
 
 on:
   workflow_dispatch:
@@ -17,9 +20,15 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  compliance:
+  tags:
     name: Compliance (seerdb tag, dialect tag)
     uses: ./.github/workflows/compliance.yml
     with:
       seerdb: tag
       dialect: tag
+  pypi:
+    name: Compliance (seerdb latest, dialect pypi)
+    uses: ./.github/workflows/compliance.yml
+    with:
+      seerdb: latest
+      dialect: pypi

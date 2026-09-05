@@ -136,10 +136,13 @@ Three workflows, one job definition:
   not.
 - `released.yml`, "SQLAlchemy vs released seerdb", runs it on demand from the
   Actions tab (version box, default `latest`) and weekly.
-- `releases.yml`, "Releases (dialect tag vs seerdb tag)", pairs this
-  repository's newest tag with the driver's newest tag, on demand and weekly:
-  what a user gets who installs both releases. `compliance.yml`'s `dialect`
-  input (`checkout` | `tag`) is what selects the dialect side.
+- `releases.yml`, "Releases (tags, and PyPI)", pairs release with release two
+  ways, on demand and weekly: this repository's newest git tag against the
+  driver's newest git tag, and this repository's newest PyPI release against
+  the driver its floor resolves to on PyPI, the exact pairing a user installs.
+  `compliance.yml`'s `dialect` input (`checkout` | `tag` | `pypi`) selects the
+  dialect side; the wheel ships only the package, so `pypi` takes the harness
+  (`test/`, `conftest.py`, `test.cfg`) from the checkout at the matching tag.
 
 Right after a driver release, a `latest` leg can fail with "no matching
 distribution" while PyPI's index propagates; rerun it before reading anything
