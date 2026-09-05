@@ -30,8 +30,12 @@ The flow is the driver's, so the two repositories share one procedure:
 
 1. **Branch off `master`**, named `release-x.y.z` (e.g. `release-0.2.0`).
 
-2. **Bump the version** in `pyproject.toml` (`version = "x.y.z"`); it is the
-   only place the version lives.
+2. **Bump the version in both places — they must stay in sync:**
+   - `pyproject.toml` → `version = "x.y.z"`
+   - `sqlalchemy_seerdb/__init__.py` → `__version__ = 'x.y.z'`
+
+   `test/test_version.py` fails when they drift, and the packaging job runs
+   it.
 
 3. **Set the driver floor honestly.** If this release depends on driver fixes,
    raise `seerdb>=…` in `pyproject.toml`'s `dependencies` to the first seerdb
