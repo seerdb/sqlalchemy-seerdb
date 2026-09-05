@@ -23,6 +23,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, ClassVar
 
+import seerdb
 from sqlalchemy import types as sqltypes
 from sqlalchemy import util
 from sqlalchemy.dialects.oracle import base as _oracle_base
@@ -33,6 +34,7 @@ from sqlalchemy.dialects.oracle.base import (
 )
 from sqlalchemy.dialects.oracle.types import _OracleDate
 from sqlalchemy.engine import cursor as _cursor
+from sqlalchemy.engine import interfaces
 
 if TYPE_CHECKING:
     from sqlalchemy.engine.url import URL
@@ -255,6 +257,13 @@ class SeerdbDialect(OracleDialect):
     insert_executemany_returning = True
     insert_executemany_returning_sort_by_parameter_order = True
 
+    # Pass a bind's type to the driver rather than leaving it to be guessed from
+    # the value. A `None` carries no type, so without this the server infers CHAR
+    # and refuses to compare it to a DATE or a NUMBER column (ORA-00932). The
+    # driver takes the declaration through setinputsizes (seerdb#696) and sends
+    # the value as the declared type (seerdb#701); the hook below hands it over.
+    bind_typing = interfaces.BindTyping.SETINPUTSIZES
+
     # The driver hands a NUMBER back as a Decimal, not a float. Saying so is
     # what makes SQLAlchemy convert: a column declared Float asks for a float and
     # gets one, and a Numeric column is left as the Decimal it already is. Left
@@ -268,6 +277,45 @@ class SeerdbDialect(OracleDialect):
     # No SQL is generated differently from the base dialect, so cached
     # statements stay valid.
     supports_statement_cache = True
+
+    def do_set_input_sizes(self, cursor, list_of_tuples, context):
+        """Declare the binds' types for the statement about to run.
+
+        SQLAlchemy hands over one `(name, dbapi_type, sqla_type)` per bind, in
+        order. Only the ones with a type to declare are passed on; a bind with
+        no `dbapi_type` is left for the driver to read off its value, which it
+        does perfectly well whenever the value can say.
+        """
+        declared = {}
+        for name, dbapi_type, sqla_type in list_of_tuples:
+            wanted = self._declared_bind_type(dbapi_type, sqla_type)
+            if wanted is not None:
+                declared[name] = wanted
+        if declared:
+            cursor.setinputsizes(**declared)
+
+    @staticmethod
+    def _declared_bind_type(dbapi_type, sqla_type):
+        """The driver type to declare for one bind, or None to leave it alone.
+
+        Mostly the DBAPI type SQLAlchemy names. The exception is a value with a
+        time of day: the generic mapping asks for the date type, which on this
+        backend is seven bytes and holds no fraction of a second, so declaring it
+        would round the value on its way in. The timestamp type is the lossless
+        one, and the server narrows it for a column that cannot hold the extra
+        precision, so it is the right thing to declare for the whole family.
+
+        A `Date` column keeps the date type: it has no time of day to lose, and
+        saying so is what makes an untyped NULL comparable to one.
+        """
+        if dbapi_type is None:
+            return None
+        # Through the affinity, not the type itself: a TypeDecorator wrapping a
+        # timestamp is still a timestamp, and testing the wrapper would miss it.
+        affinity = getattr(sqla_type, '_type_affinity', None)
+        if affinity is not None and issubclass(affinity, sqltypes.DateTime):
+            return seerdb.DB_TYPE_TIMESTAMP
+        return dbapi_type
 
     @classmethod
     def import_dbapi(cls) -> Any:
