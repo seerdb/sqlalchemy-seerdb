@@ -115,6 +115,10 @@ Three workflows, one job definition:
   third is the early warning for the next driver release.
 - `released.yml`, "SQLAlchemy vs released seerdb", runs it on demand from the
   Actions tab (version box, default `latest`) and weekly.
+- `releases.yml`, "Releases (dialect tag vs seerdb tag)", pairs this
+  repository's newest tag with the driver's newest tag, on demand and weekly:
+  what a user gets who installs both releases. `compliance.yml`'s `dialect`
+  input (`checkout` | `tag`) is what selects the dialect side.
 
 Right after a driver release, a `latest` leg can fail with "no matching
 distribution" while PyPI's index propagates; rerun it before reading anything

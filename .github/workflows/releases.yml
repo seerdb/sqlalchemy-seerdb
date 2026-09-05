@@ -1,0 +1,25 @@
+# SPDX-FileCopyrightText: 2026 Peter Lemenkov <lemenkov@gmail.com>
+# SPDX-License-Identifier: MIT
+
+# Release against release: this dialect at its newest git tag against seerdb
+# at its newest git tag, the pairing a user gets who installs both. On demand
+# and weekly. The push/PR workflow tests the checkout instead, and the
+# released-driver workflow a chosen driver against the checkout.
+name: Releases (dialect tag vs seerdb tag)
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "37 5 * * 1"
+
+concurrency:
+  group: releases-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  compliance:
+    name: Compliance (seerdb tag, dialect tag)
+    uses: ./.github/workflows/compliance.yml
+    with:
+      seerdb: tag
+      dialect: tag

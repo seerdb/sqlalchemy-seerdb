@@ -14,10 +14,15 @@ on:
         description: "latest (PyPI) | tag (seerdb's newest git tag) | master | a released version such as 2.5.0"
         required: true
         type: string
+      dialect:
+        description: "checkout (the code being tested) | tag (this repository's newest git tag)"
+        required: false
+        default: "checkout"
+        type: string
 
 jobs:
   compliance:
-    name: Compliance suite (${{ matrix.db.name }}, seerdb ${{ inputs.seerdb }})
+    name: Compliance suite (${{ matrix.db.name }}, seerdb ${{ inputs.seerdb }}, dialect ${{ inputs.dialect }})
     runs-on: ubuntu-latest
     timeout-minutes: 30
     strategy:
@@ -53,6 +58,16 @@ jobs:
           --shm-size=2g
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      # `dialect: tag` tests this repository's newest release rather than the
+      # checkout, so the two releases can be paired: seerdb's tag and ours.
+      - name: Use this repository's newest tag
+        if: inputs.dialect == 'tag'
+        run: |
+          TAG=$(git tag --list | grep -E '^v?[0-9]+(\.[0-9]+)+$' | sort -V | tail -1)
+          echo "newest sqlalchemy-seerdb tag: $TAG"
+          git checkout -q "$TAG"
       - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
