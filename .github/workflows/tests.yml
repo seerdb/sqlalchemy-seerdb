@@ -177,6 +177,10 @@ jobs:
               'INSERT ANY TABLE, UPDATE ANY TABLE, DELETE ANY TABLE, '
               'CREATE ANY INDEX, DROP ANY INDEX, CREATE ANY VIEW, '
               'DROP ANY VIEW, CREATE ANY SEQUENCE, DROP ANY SEQUENCE, '
+              # Reflection reads the catalog views, which list only what the
+              # user may touch: without this a sequence in test_schema is
+              # invisible, SQLAlchemy re-creates it and ORA-00955 cascades.
+              'SELECT ANY SEQUENCE, '
               'COMMENT ANY TABLE, ANALYZE ANY TO pyo',
           ]
           for statement in statements:
@@ -191,5 +195,5 @@ jobs:
       - name: Run the compliance suite against ${{ matrix.db.name }}
         continue-on-error: true
         run: >-
-          python -m pytest -q --tb=short
+          python -m pytest -q --tb=short -s
           --dburi "oracle+seerdb://pyo:pyo123@localhost:1521/?service_name=${{ matrix.db.service }}"
