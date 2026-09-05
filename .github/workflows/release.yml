@@ -1,0 +1,105 @@
+# SPDX-FileCopyrightText: © 2026 Peter Lemenkov
+# SPDX-License-Identifier: CC0-1.0
+
+name: Release
+
+on:
+  push:
+    tags:
+      # Matches the existing convention (0.1, 0.2, …) plus v-prefixed
+      # tags for future flexibility.
+      - '[0-9]+.[0-9]+'
+      - '[0-9]+.[0-9]+.[0-9]+'
+      - 'v[0-9]+.[0-9]+'
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    name: Build and create the GitHub Release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write   # required by `gh release create`
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # Full history so the auto-generated notes can reach the
+          # previous tag for the "Full Changelog" diff link.
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.13'
+
+      - name: Install build + runtime dependencies
+        run: pip install --upgrade pip build pycryptodome tzdata
+
+      - name: Run offline test suite
+        # Gate the release on the offline-safe tests. The DB-backed
+        # integration tests stay opt-in via SEERDB_TEST_USER and are
+        # not run here — they need a live Oracle and can't gate CI.
+        run: python -m unittest -v
+                tests.test_crypto
+                tests.test_tns_decode
+                tests.test_tns_encode
+                tests.test_tns_types
+                tests.test_api_conveniences
+                tests.test_connection
+
+      - name: Build sdist + wheel
+        # The published distribution is the client driver only — the Mirror
+        # server (seerdb.server) is excluded in pyproject (#301).
+        run: python -m build
+
+      - name: Verify build artifacts
+        run: |
+          ls -la dist/
+          python -m pip install --user twine
+          python -m twine check dist/*
+
+      - name: Upload the distribution for the PyPI publish job
+        uses: actions/upload-artifact@v7
+        with:
+          name: dist
+          path: dist/
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # `--generate-notes` produces GitHub's standard auto-generated
+          # release summary: "What's Changed" (PRs since the previous
+          # tag, or commits if no PRs), "New Contributors", and a "Full
+          # Changelog" comparison link. Same format as clicking
+          # "Generate release notes" in the GitHub UI.
+          gh release create "${GITHUB_REF_NAME}" \
+            --title "seerdb ${GITHUB_REF_NAME}" \
+            --generate-notes \
+            --verify-tag \
+            dist/*
+
+  publish-pypi:
+    name: Publish to PyPI
+    needs: release
+    runs-on: ubuntu-latest
+    # Trusted Publishing (OIDC) — no long-lived token. On PyPI, the `seerdb`
+    # project's trusted publisher must match: owner/repo `seerdb/seerdb`,
+    # workflow `release.yml`, and this environment name. Add a required reviewer
+    # to the `pypi` GitHub environment to gate each (irreversible) publish behind
+    # a manual approval. (#420)
+    environment:
+      name: pypi
+      url: https://pypi.org/p/seerdb
+    permissions:
+      id-token: write   # mint the OIDC token PyPI verifies
+    steps:
+      - name: Download the built distribution
+        uses: actions/download-artifact@v8
+        with:
+          name: dist
+          path: dist/
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
