@@ -25,28 +25,32 @@ never by green alone.
 
 Releases publish to PyPI automatically via GitHub Actions Trusted Publishing,
 triggered when the maintainer **pushes a version tag**. An agent's job is to
-*prepare* the release — never to tag it. The steps:
+*prepare* the release on a branch and open the PR — never to merge or tag it.
+The flow is the driver's, so the two repositories share one procedure:
 
-1. **Bump the version** in `pyproject.toml` (`version = "x.y.z"`); it is the
+1. **Branch off `master`**, named `release-x.y.z` (e.g. `release-0.2.0`).
+
+2. **Bump the version** in `pyproject.toml` (`version = "x.y.z"`); it is the
    only place the version lives.
 
-2. **Set the driver floor honestly.** If this release depends on driver fixes,
+3. **Set the driver floor honestly.** If this release depends on driver fixes,
    raise `seerdb>=…` in `pyproject.toml`'s `dependencies` to the first seerdb
    release that carries them, and say which fixes in the commit message. A
    dialect release must never require an unreleased driver.
 
-3. **Commit to `master`** (this repository does not use a fork→PR flow for
-   day-to-day changes) with the title `Release x.y.z`, and state the validation
-   status in the message: which tiers the compliance suite passed on, against
-   which driver version, and any known failures with their tickets.
+4. **Open a PR** against `master` titled `Release x.y.z`. In the body, state
+   the validation status: which tiers the compliance suite passed on, against
+   which released driver (the `latest` legs of the push run, or a run of the
+   released-driver workflow pinned to that version), and any known failures
+   with their tickets.
 
-4. **Stop there. Do NOT create or push the tag.** The maintainer runs the
-   released-driver workflow (below), tags `x.y.z`, and the tag publishes
-   through `release.yml`: a GitHub Release, then PyPI via Trusted Publishing
-   from the `pypi` environment. PyPI has to know that publisher (owner
-   `seerdb`, repository `sqlalchemy-seerdb`, workflow `release.yml`,
-   environment `pypi`), registered once on the project's PyPI page, as a
-   pending publisher before the first release.
+5. **Stop there. Do NOT merge the PR, and do NOT create or push the tag.** The
+   maintainer reviews, merges, tags `x.y.z`, and the tag publishes through
+   `release.yml`: a GitHub Release, then PyPI via Trusted Publishing from the
+   `pypi` environment. PyPI has to know that publisher (owner `seerdb`,
+   repository `sqlalchemy-seerdb`, workflow `release.yml`, environment
+   `pypi`), registered once on the project's PyPI page, as a pending
+   publisher before the first release.
 
 ### Versioning
 
