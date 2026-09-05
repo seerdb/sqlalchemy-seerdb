@@ -164,6 +164,15 @@ jobs:
           )
           cur = conn.cursor()
           statements = [
+              # On the older image the test user's own tables land in the
+              # SYSTEM tablespace, and SQLAlchemy's Oracle dialect hides
+              # SYSTEM-tablespace tables from get_table_names. The suite then
+              # found no tables to empty between tests, issued no DELETE, and
+              # every per-test INSERT after the first collided with ORA-00001:
+              # the whole 11g cascade, and never reproducible against a
+              # database whose test user defaults to USERS.
+              'ALTER USER pyo DEFAULT TABLESPACE USERS',
+              'ALTER USER pyo QUOTA UNLIMITED ON USERS',
               'CREATE USER test_schema IDENTIFIED BY test_schema',
               'GRANT CREATE SESSION TO test_schema',
               # Storage for an object is charged to the schema that owns it, so
