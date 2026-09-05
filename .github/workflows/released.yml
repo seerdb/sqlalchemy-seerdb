@@ -1,0 +1,31 @@
+# SPDX-FileCopyrightText: 2026 Peter Lemenkov <lemenkov@gmail.com>
+# SPDX-License-Identifier: MIT
+
+# The compliance suite against a *released* seerdb, on demand or weekly: the
+# latest release by default, or a pinned one. The push/PR workflow covers
+# `latest` and `master` on every change; this one answers "does the dialect on
+# master still pass against what a user installs today", and lets a specific
+# release be checked at will.
+name: SQLAlchemy vs released seerdb
+
+on:
+  workflow_dispatch:
+    inputs:
+      seerdb:
+        description: "latest, or a released version such as 2.5.0"
+        required: false
+        default: "latest"
+        type: string
+  schedule:
+    - cron: "17 5 * * 1"
+
+concurrency:
+  group: released-${{ github.ref }}-${{ inputs.seerdb || 'latest' }}
+  cancel-in-progress: true
+
+jobs:
+  compliance:
+    name: Compliance (seerdb ${{ inputs.seerdb || 'latest' }})
+    uses: ./.github/workflows/compliance.yml
+    with:
+      seerdb: ${{ inputs.seerdb || 'latest' }}

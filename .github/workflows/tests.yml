@@ -87,136 +87,15 @@ jobs:
   # than protect anything. This job reports progress; the job above is the
   # gate. Turn continue-on-error off once the suite is genuinely green.
   compliance:
-    name: Compliance suite (${{ matrix.db.name }}, driver ${{ matrix.driver }})
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
+    name: Compliance (seerdb ${{ matrix.seerdb }})
+    needs: package
     strategy:
       fail-fast: false
       matrix:
-        # Two drivers: the release a user installs (`pypi`, whatever the
-        # dependency floor resolves to) and the driver's current master, as an
-        # early warning for the next release. Both matter: the first is what
-        # this dialect is released against, the second is what will be.
-        driver: ["pypi", "master"]
-        # Two tiers rather than every one, to stay inside the Actions budget:
-        # the oldest server this dialect reaches at all, and a current one.
-        db:
-          - name: "11g"
-            image: "gvenzl/oracle-xe:11-slim"
-            service: "XE"
-          - name: "23ai Free"
-            image: "gvenzl/oracle-free:23-slim"
-            service: "FREEPDB1"
-    services:
-      oracle:
-        image: ${{ matrix.db.image }}
-        env:
-          ORACLE_PASSWORD: oracle
-          APP_USER: pyo
-          APP_USER_PASSWORD: pyo123
-        ports:
-          - 1521:1521
-        # The image ships healthcheck.sh; wait for first-boot setup before the
-        # test step. The shared-memory bump keeps the newer instance from
-        # OOM-stalling partway through the suite.
-        options: >-
-          --health-cmd healthcheck.sh
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 40
-          --health-start-period 90s
-          --shm-size=2g
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v7
-        with:
-          python-version: "3.12"
-      # `pip install .[test]` brings the released driver from PyPI: the `pypi`
-      # leg tests exactly that.
-      - run: pip install .[test]
-      # The `master` leg swaps in the driver's current master.
-      #
-      # --force-reinstall, not --upgrade: master carries the same version string
-      # as the last release until a release bumps it, so pip compares the two,
-      # sees no change and silently keeps the published wheel. That is not
-      # hypothetical — it happened, and the giveaway was a run whose numbers were
-      # identical to the previous one.
-      - name: Use the driver's current master
-        if: matrix.driver == 'master'
-        run: |
-          pip install --force-reinstall --no-deps \
-            "seerdb @ git+https://github.com/seerdb/seerdb@master"
-      - name: Which driver this leg runs
-        run: |
-          python -c "import seerdb, inspect, pathlib; \
-            print('driver', seerdb.__version__ if hasattr(seerdb, '__version__') else '?', \
-                  'from:', pathlib.Path(inspect.getfile(seerdb)).parent)"
-          pip show seerdb | grep -E '^(Version|Location)'
-      # SQLAlchemy's suite requires a second namespace called test_schema, which
-      # on this backend is a username, and the test account has to be able to
-      # create and drop tables inside it. Without it every test in
-      # ComponentReflectionTest errors in setup on "user does not exist" — 749 of
-      # them — because they share a fixture that builds tables there.
-      #
-      # The broad ANY-object grants below are deliberate and safe *here*: this
-      # container is created for one run and thrown away. Do not copy them onto
-      # a long-lived instance without narrowing them.
-      - name: Create the test_schema namespace
-        run: |
-          python - <<'PY'
-          import seerdb
-
-          conn = seerdb.connect(
-              host='localhost', port=1521, service_name='${{ matrix.db.service }}',
-              user='system', password='oracle',
-          )
-          cur = conn.cursor()
-          statements = [
-              # On the older image the test user's own tables land in the
-              # SYSTEM tablespace, and SQLAlchemy's Oracle dialect hides
-              # SYSTEM-tablespace tables from get_table_names. The suite then
-              # found no tables to empty between tests, issued no DELETE, and
-              # every per-test INSERT after the first collided with ORA-00001:
-              # the whole 11g cascade, and never reproducible against a
-              # database whose test user defaults to USERS.
-              'ALTER USER pyo DEFAULT TABLESPACE USERS',
-              'ALTER USER pyo QUOTA UNLIMITED ON USERS',
-              'CREATE USER test_schema IDENTIFIED BY test_schema',
-              'GRANT CREATE SESSION TO test_schema',
-              # Storage for an object is charged to the schema that owns it, so
-              # the quota has to be test_schema's. A quota on USERS alone is not
-              # enough: on the older image a new user defaults to the SYSTEM
-              # tablespace, and every CREATE TABLE then fails with ORA-01950 —
-              # which is what made that tier look far worse than the newer one.
-              'ALTER USER test_schema DEFAULT TABLESPACE USERS',
-              'GRANT UNLIMITED TABLESPACE TO test_schema',
-              'GRANT CREATE ANY TABLE, DROP ANY TABLE, SELECT ANY TABLE, '
-              'INSERT ANY TABLE, UPDATE ANY TABLE, DELETE ANY TABLE, '
-              'CREATE ANY INDEX, DROP ANY INDEX, CREATE ANY VIEW, '
-              'DROP ANY VIEW, CREATE ANY SEQUENCE, DROP ANY SEQUENCE, '
-              # Reflection reads the catalog views, which list only what the
-              # user may touch: without this a sequence in test_schema is
-              # invisible, SQLAlchemy re-creates it and ORA-00955 cascades.
-              'SELECT ANY SEQUENCE, '
-              'COMMENT ANY TABLE, ANALYZE ANY TO pyo',
-          ]
-          for statement in statements:
-              try:
-                  cur.execute(statement)
-              except Exception as exc:  # already present from a previous attempt
-                  print(f'skipped: {statement[:40]}... -> {exc}')
-          # What the image was built with; the suite's Unicode tests depend on it.
-          cur.execute(
-              "SELECT parameter, value FROM nls_database_parameters "
-              "WHERE parameter IN ('NLS_CHARACTERSET', 'NLS_NCHAR_CHARACTERSET', 'NLS_LENGTH_SEMANTICS')"
-          )
-          print('database NLS:', cur.fetchall())
-          conn.commit()
-          conn.close()
-          print('test_schema ready')
-          PY
-      - name: Run the compliance suite against ${{ matrix.db.name }}
-        continue-on-error: true
-        run: >-
-          python -m pytest -q --tb=short -s
-          --dburi "oracle+seerdb://pyo:pyo123@localhost:1521/?service_name=${{ matrix.db.service }}"
+        # The release a user installs and the driver's current master: the
+        # first is what this dialect is released against, the second is what
+        # it will be released against next.
+        seerdb: ["latest", "master"]
+    uses: ./.github/workflows/compliance.yml
+    with:
+      seerdb: ${{ matrix.seerdb }}
