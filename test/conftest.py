@@ -23,8 +23,11 @@ pytest.register_assert_rewrite('sqlalchemy.testing.assertions')
 
 from sqlalchemy.testing.plugin.pytestplugin import *
 
+_sqlalchemy_configure = pytest_configure  # the plugin's hook, kept below
+
 
 def pytest_configure(config):
+    _sqlalchemy_configure(config)
     # A diagnostic trace of what reaches the driver, one stderr line per call,
     # switched on with SEERDB_SPY=1. Meant for CI runs with output uncaptured
     # (`-s`): the 11g compliance job sees rows survive the per-test DELETE
