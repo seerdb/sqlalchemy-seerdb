@@ -83,6 +83,9 @@ jobs:
           VERSION=$(pip show sqlalchemy-seerdb | awk '/^Version:/{print $2}')
           echo "newest sqlalchemy-seerdb release on PyPI: $VERSION"
           git checkout -q "$VERSION"
+          # pytest runs from the repository root, where the checked-out package
+          # directory would shadow the installed wheel; only the harness stays.
+          rm -rf sqlalchemy_seerdb
       # `pip install .[test]` brings the released driver from PyPI, whatever the
       # dependency floor resolves to: that is what `latest` (or `pypi`) tests.
       - if: inputs.dialect != 'pypi'
