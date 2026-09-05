@@ -41,7 +41,12 @@ triggered when the maintainer **pushes a version tag**. An agent's job is to
    which driver version, and any known failures with their tickets.
 
 4. **Stop there. Do NOT create or push the tag.** The maintainer runs the
-   released-driver workflow (below), tags `x.y.z`, and the tag publishes.
+   released-driver workflow (below), tags `x.y.z`, and the tag publishes
+   through `release.yml`: a GitHub Release, then PyPI via Trusted Publishing
+   from the `pypi` environment. PyPI has to know that publisher (owner
+   `seerdb`, repository `sqlalchemy-seerdb`, workflow `release.yml`,
+   environment `pypi`), registered once on the project's PyPI page, as a
+   pending publisher before the first release.
 
 ### Versioning
 
