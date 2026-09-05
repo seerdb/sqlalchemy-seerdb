@@ -34,19 +34,13 @@ jobs:
           python-version: '3.13'
 
       - name: Install build + runtime dependencies
-        run: pip install --upgrade pip build pycryptodome tzdata
+        run: pip install --upgrade pip build && pip install .
 
       - name: Run offline test suite
         # Gate the release on the offline-safe tests. The DB-backed
         # integration tests stay opt-in via SEERDB_TEST_USER and are
         # not run here — they need a live Oracle and can't gate CI.
         run: python -m unittest -v
-                tests.test_crypto
-                tests.test_tns_decode
-                tests.test_tns_encode
-                tests.test_tns_types
-                tests.test_api_conveniences
-                tests.test_connection
 
       - name: Build sdist + wheel
         # The published distribution is the client driver only — the Mirror
@@ -75,7 +69,7 @@ jobs:
           # Changelog" comparison link. Same format as clicking
           # "Generate release notes" in the GitHub UI.
           gh release create "${GITHUB_REF_NAME}" \
-            --title "seerdb ${GITHUB_REF_NAME}" \
+            --title "sqlalchemy-seerdb ${GITHUB_REF_NAME}" \
             --generate-notes \
             --verify-tag \
             dist/*
@@ -91,7 +85,7 @@ jobs:
     # a manual approval. (#420)
     environment:
       name: pypi
-      url: https://pypi.org/p/seerdb
+      url: https://pypi.org/p/sqlalchemy-seerdb
     permissions:
       id-token: write   # mint the OIDC token PyPI verifies
     steps:
