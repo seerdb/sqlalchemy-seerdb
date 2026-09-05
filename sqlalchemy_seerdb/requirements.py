@@ -164,6 +164,67 @@ class Requirements(SuiteRequirements):
         return exclusions.open()
 
     @property
+    def views(self):
+        """Views exist, so the suite may build its own and expect to see them.
+
+        Off by default. Verified: a view created here is listed by
+        `Inspector.get_view_names()` and its text comes back from
+        `get_view_definition()`. Left closed, the fixture never creates the
+        suite's views and `test_get_view_names` compares an empty list against
+        the three names it expected to find.
+        """
+        return exclusions.open()
+
+    @property
+    def unique_constraints_reflect_as_index(self):
+        """A UNIQUE constraint is backed by an index this backend creates for it,
+        and reflection reports that index.
+
+        Verified: `UniqueConstraint('u', name='v_parent_u_uq')` reflects through
+        `get_indexes()` as `{'name': 'v_parent_u_uq', 'unique': True, ...}`.
+        The suite's expected index sets include such entries only when this is
+        declared, so left at the default every reflected unique constraint was
+        an unexplained extra — the single largest group of remaining failures.
+
+        A FOREIGN KEY, by contrast, gets no index here, so
+        `foreign_keys_reflect_as_index` stays at its closed default. Also
+        verified rather than assumed.
+        """
+        return exclusions.open()
+
+    @property
+    def reflect_indexes_with_ascdesc_as_expression(self):
+        """A DESC column in an index reflects as an expression, not a column.
+
+        Verified: `Index('ix', text('q DESC'))` comes back as
+        `column_names: [None], expressions: ['"Q"'],
+        column_sorting: {'"Q"': ('desc',)}`. That is the shape this requirement
+        describes, and the shape the suite expects once it is declared.
+        """
+        return exclusions.open()
+
+    @property
+    def reflect_table_options(self):
+        """Table options can be reflected.
+
+        Verified: `get_table_options()` returns a dict, e.g.
+        `{'oracle_tablespace': 'USERS'}`. Off by default the suite expects a
+        `NotImplementedError` instead, and fails on "Callable did not raise".
+        """
+        return exclusions.open()
+
+    @property
+    def reflects_pk_names(self):
+        """A primary-key constraint's name survives reflection.
+
+        Verified: an unnamed key reflects as its system name (`sys_c0012860`) and
+        an explicitly named one keeps that name. Off by default the suite treats
+        the name check as expected-to-fail, and reports an "Unexpected success"
+        when it passes.
+        """
+        return exclusions.open()
+
+    @property
     def timestamp_microseconds(self):
         """The timestamp type keeps sub-second precision.
 
