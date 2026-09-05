@@ -59,11 +59,13 @@ jobs:
           assert (dialect.name, dialect.driver) == ('oracle', 'seerdb')
 
           # The URL has to reach the driver as its own keywords, with the
-          # non-string query arguments coerced.
+          # non-string query arguments coerced, and autocommit off: the driver
+          # commits every statement unless told otherwise, and SQLAlchemy's
+          # transactions would mean nothing.
           args = dialect().create_connect_args(url)[1]
           assert args == {
               'host': 'h', 'port': 1521, 'user': 'u', 'password': 'p',
-              'service_name': 'XE', 'timeout': 5000,
+              'service_name': 'XE', 'timeout': 5000, 'autocommit': False,
           }, args
           assert isinstance(args['timeout'], int), 'query args must be coerced'
           print('entry point OK:', dialect.__module__ + '.' + dialect.__name__)
