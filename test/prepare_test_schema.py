@@ -29,21 +29,45 @@ import sys
 import seerdb
 
 
-def statements(test_user: str, test_schema_password: str) -> list[str]:
+def statements(test_user: str, test_schema_password: str) -> list[tuple[str, str]]:
     user = test_user.upper()
+    # (label, SQL) pairs. The label is what the run prints; it never carries the
+    # test_schema password, which appears only in the CREATE USER SQL, so the
+    # progress output cannot leak it.
     return [
-        f'ALTER USER {user} DEFAULT TABLESPACE USERS',
-        f'ALTER USER {user} QUOTA UNLIMITED ON USERS',
-        f'CREATE USER test_schema IDENTIFIED BY {test_schema_password}',
-        'GRANT CREATE SESSION TO test_schema',
-        'ALTER USER test_schema DEFAULT TABLESPACE USERS',
-        'GRANT UNLIMITED TABLESPACE TO test_schema',
         (
-            'GRANT CREATE ANY TABLE, DROP ANY TABLE, SELECT ANY TABLE, '
-            'INSERT ANY TABLE, UPDATE ANY TABLE, DELETE ANY TABLE, '
-            'CREATE ANY INDEX, DROP ANY INDEX, CREATE ANY VIEW, DROP ANY VIEW, '
-            'CREATE ANY SEQUENCE, DROP ANY SEQUENCE, SELECT ANY SEQUENCE, '
-            f'COMMENT ANY TABLE, ANALYZE ANY TO {user}'
+            f'ALTER USER {user} DEFAULT TABLESPACE USERS',
+            f'ALTER USER {user} DEFAULT TABLESPACE USERS',
+        ),
+        (
+            f'ALTER USER {user} QUOTA UNLIMITED ON USERS',
+            f'ALTER USER {user} QUOTA UNLIMITED ON USERS',
+        ),
+        (
+            'CREATE USER test_schema IDENTIFIED BY ***',
+            f'CREATE USER test_schema IDENTIFIED BY {test_schema_password}',
+        ),
+        (
+            'GRANT CREATE SESSION TO test_schema',
+            'GRANT CREATE SESSION TO test_schema',
+        ),
+        (
+            'ALTER USER test_schema DEFAULT TABLESPACE USERS',
+            'ALTER USER test_schema DEFAULT TABLESPACE USERS',
+        ),
+        (
+            'GRANT UNLIMITED TABLESPACE TO test_schema',
+            'GRANT UNLIMITED TABLESPACE TO test_schema',
+        ),
+        (
+            f'GRANT CREATE/DROP ANY TABLE, INDEX, VIEW, SEQUENCE, ... TO {user}',
+            (
+                'GRANT CREATE ANY TABLE, DROP ANY TABLE, SELECT ANY TABLE, '
+                'INSERT ANY TABLE, UPDATE ANY TABLE, DELETE ANY TABLE, '
+                'CREATE ANY INDEX, DROP ANY INDEX, CREATE ANY VIEW, '
+                'DROP ANY VIEW, CREATE ANY SEQUENCE, DROP ANY SEQUENCE, '
+                f'SELECT ANY SEQUENCE, COMMENT ANY TABLE, ANALYZE ANY TO {user}'
+            ),
         ),
     ]
 
@@ -67,14 +91,14 @@ def main(argv: list[str] | None = None) -> int:
         password=args.dba_password,
     )
     cur = conn.cursor()
-    for statement in statements(args.test_user, args.test_schema_password):
+    for label, statement in statements(args.test_user, args.test_schema_password):
         try:
             cur.execute(statement)
-            print(f'done:    {statement[:60]}')
+            print(f'done:    {label}')
         except seerdb.DatabaseError as exc:
             # Already present from an earlier run, or a privilege the account
             # cannot grant: say so and carry on, the rest may still apply.
-            print(f'skipped: {statement[:60]} -> {str(exc).splitlines()[0]}')
+            print(f'skipped: {label} -> {str(exc).splitlines()[0]}')
     # What the database was built with; the suite's Unicode tests depend on it.
     cur.execute(
         'SELECT parameter, value FROM nls_database_parameters '
