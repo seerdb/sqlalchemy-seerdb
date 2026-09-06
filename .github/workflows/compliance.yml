@@ -126,68 +126,14 @@ jobs:
             print('dialect', sqlalchemy_seerdb.__version__, \
                   'from:', pathlib.Path(inspect.getfile(sqlalchemy_seerdb)).parent)"
       # SQLAlchemy's suite requires a second namespace called test_schema, which
-      # on this backend is a username, and the test account has to be able to
-      # create and drop tables inside it. Without it every test in
-      # ComponentReflectionTest errors in setup on "user does not exist" — 749 of
-      # them — because they share a fixture that builds tables there.
-      #
-      # The broad ANY-object grants below are deliberate and safe *here*: this
-      # container is created for one run and thrown away. Do not copy them onto
-      # a long-lived instance without narrowing them.
+      # on this backend is a username, plus grants and a tablespace the test
+      # user needs; test/prepare_test_schema.py does it and says why. The broad
+      # ANY-object grants it makes are safe *here*: this container is created
+      # for one run and thrown away.
       - name: Create the test_schema namespace
-        run: |
-          python - <<'PY'
-          import seerdb
-
-          conn = seerdb.connect(
-              host='localhost', port=1521, service_name='${{ matrix.db.service }}',
-              user='system', password='oracle',
-          )
-          cur = conn.cursor()
-          statements = [
-              # On the older image the test user's own tables land in the
-              # SYSTEM tablespace, and SQLAlchemy's Oracle dialect hides
-              # SYSTEM-tablespace tables from get_table_names. The suite then
-              # found no tables to empty between tests, issued no DELETE, and
-              # every per-test INSERT after the first collided with ORA-00001:
-              # the whole 11g cascade, and never reproducible against a
-              # database whose test user defaults to USERS.
-              'ALTER USER pyo DEFAULT TABLESPACE USERS',
-              'ALTER USER pyo QUOTA UNLIMITED ON USERS',
-              'CREATE USER test_schema IDENTIFIED BY test_schema',
-              'GRANT CREATE SESSION TO test_schema',
-              # Storage for an object is charged to the schema that owns it, so
-              # the quota has to be test_schema's. A quota on USERS alone is not
-              # enough: on the older image a new user defaults to the SYSTEM
-              # tablespace, and every CREATE TABLE then fails with ORA-01950 —
-              # which is what made that tier look far worse than the newer one.
-              'ALTER USER test_schema DEFAULT TABLESPACE USERS',
-              'GRANT UNLIMITED TABLESPACE TO test_schema',
-              'GRANT CREATE ANY TABLE, DROP ANY TABLE, SELECT ANY TABLE, '
-              'INSERT ANY TABLE, UPDATE ANY TABLE, DELETE ANY TABLE, '
-              'CREATE ANY INDEX, DROP ANY INDEX, CREATE ANY VIEW, '
-              'DROP ANY VIEW, CREATE ANY SEQUENCE, DROP ANY SEQUENCE, '
-              # Reflection reads the catalog views, which list only what the
-              # user may touch: without this a sequence in test_schema is
-              # invisible, SQLAlchemy re-creates it and ORA-00955 cascades.
-              'SELECT ANY SEQUENCE, '
-              'COMMENT ANY TABLE, ANALYZE ANY TO pyo',
-          ]
-          for statement in statements:
-              try:
-                  cur.execute(statement)
-              except Exception as exc:  # already present from a previous attempt
-                  print(f'skipped: {statement[:40]}... -> {exc}')
-          # What the image was built with; the suite's Unicode tests depend on it.
-          cur.execute(
-              "SELECT parameter, value FROM nls_database_parameters "
-              "WHERE parameter IN ('NLS_CHARACTERSET', 'NLS_NCHAR_CHARACTERSET', 'NLS_LENGTH_SEMANTICS')"
-          )
-          print('database NLS:', cur.fetchall())
-          conn.commit()
-          conn.close()
-          print('test_schema ready')
-          PY
+        run: >-
+          python test/prepare_test_schema.py --host localhost
+          --service "${{ matrix.db.service }}" --dba-password oracle --test-user pyo
       # Gating against a released driver (`latest`, `tag`, a version): the
       # dialect must work with the driver its dependency floor resolves to.
       # Informational against `master`: a failure there is either a driver
