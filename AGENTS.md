@@ -74,9 +74,10 @@ pytest --dburi "oracle+seerdb://user:password@host:1521/?service_name=XE"
   with `configparser`, not from `pyproject.toml`. Without it the whole module
   fails to collect.
 - The suite needs a second schema named `test_schema` and a test user that can
-  reach into it (see the README's "one setup step" and the grant list in
-  `.github/workflows/compliance.yml`). Three environment traps found the hard
-  way, each of which looks like a driver bug until it is not:
+  reach into it: `test/prepare_test_schema.py`, run as a DBA, does all of it
+  (the README's "one setup step"), and CI runs the same script. Three
+  environment traps found the hard way, each of which looks like a driver bug
+  until it is not, are what the script does beyond creating the user:
   - the test user's tables must live in the `USERS` tablespace, because the
     Oracle dialect hides `SYSTEM`-tablespace tables from reflection and the
     suite then never empties them between tests (rows "survive", ORA-00001);

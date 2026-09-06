@@ -71,16 +71,33 @@ builds tables there.
 
 The test account cannot create it (`ORA-01031`), so run this as a DBA once:
 
+```
+python test/prepare_test_schema.py --host localhost --service XE \
+    --dba-password <SYSTEM password> --test-user <your test user>
+```
+
+It is safe to rerun: each statement is attempted on its own and one that has
+already been applied is reported and skipped. What it runs, for a DBA who would
+rather type it:
+
 ```sql
+-- the test account's own tables must live in USERS: the Oracle dialect hides
+-- SYSTEM-tablespace tables from reflection, and the suite then never empties
+-- them between tests (rows "survive", ORA-00001)
+ALTER USER <your test user> DEFAULT TABLESPACE USERS;
+ALTER USER <your test user> QUOTA UNLIMITED ON USERS;
+
 CREATE USER test_schema IDENTIFIED BY test_schema;
 GRANT CREATE SESSION TO test_schema;
-ALTER USER test_schema QUOTA UNLIMITED ON USERS;
+ALTER USER test_schema DEFAULT TABLESPACE USERS;
+GRANT UNLIMITED TABLESPACE TO test_schema;
 
--- so the test account can build and drop the fixtures inside that schema
+-- so the test account can build and drop the fixtures inside that schema;
+-- SELECT ANY SEQUENCE keeps sequences in test_schema visible to reflection
 GRANT CREATE ANY TABLE, DROP ANY TABLE, SELECT ANY TABLE, INSERT ANY TABLE,
       UPDATE ANY TABLE, DELETE ANY TABLE, CREATE ANY INDEX, DROP ANY INDEX,
       CREATE ANY VIEW, DROP ANY VIEW, CREATE ANY SEQUENCE, DROP ANY SEQUENCE,
-      COMMENT ANY TABLE, ANALYZE ANY TO <your test user>;
+      SELECT ANY SEQUENCE, COMMENT ANY TABLE, ANALYZE ANY TO <your test user>;
 ```
 
 Those `ANY` privileges are broad. They are fine on a throwaway test instance —
