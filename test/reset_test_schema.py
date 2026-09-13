@@ -38,6 +38,15 @@ import seerdb
 # CASCADE CONSTRAINTS first, because on Oracle a table referenced by a foreign
 # key will not go without it; a Mirror in front of PostgreSQL rejects that
 # spelling (ORA-00900), so a plain DROP follows as the fallback.
+#
+# Object tables (CREATE TABLE ... OF some_type) are a kind of their own because
+# USER_TABLES does not list them -- only USER_OBJECT_TABLES / USER_ALL_TABLES do
+# -- while the dialect's reflection (ALL_TABLES) sees them like any other table.
+# One such leftover, from a driver test suite sharing the schema, failed 41
+# ComponentReflectionTest cases that compare the whole table set. The types they
+# are built on go after them (a type in use by a table will not drop) and
+# before the sequences; FORCE first, because a type referenced by another type
+# needs it, then the plain spelling for a backend without it.
 _KINDS = (
     ('view', 'sys.user_views', ('DROP VIEW {name}',)),
     (
@@ -45,6 +54,12 @@ _KINDS = (
         'sys.user_tables',
         ('DROP TABLE {name} CASCADE CONSTRAINTS', 'DROP TABLE {name}'),
     ),
+    (
+        'object table',
+        'sys.user_object_tables',
+        ('DROP TABLE {name} CASCADE CONSTRAINTS', 'DROP TABLE {name}'),
+    ),
+    ('type', 'sys.user_types', ('DROP TYPE {name} FORCE', 'DROP TYPE {name}')),
     ('sequence', 'sys.user_sequences', ('DROP SEQUENCE {name}',)),
 )
 
@@ -56,6 +71,8 @@ _KINDS = (
 _NAME_COLUMN = {
     'sys.user_views': 'view_name',
     'sys.user_tables': 'table_name',
+    'sys.user_object_tables': 'table_name',
+    'sys.user_types': 'type_name',
     'sys.user_sequences': 'sequence_name',
 }
 
