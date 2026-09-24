@@ -20,6 +20,12 @@ on:
         default: "checkout"
         type: string
 
+env:
+  # The SQLAlchemy every run installs: one exact version, never a range or the
+  # newest release, so a run changes only when this line does. A newer
+  # SQLAlchemy is a deliberate upgrade of its own.
+  SQLALCHEMY: "2.0.54"
+
 jobs:
   compliance:
     name: Compliance suite (${{ matrix.db.name }}, seerdb ${{ inputs.seerdb }}, dialect ${{ inputs.dialect }})
@@ -79,7 +85,7 @@ jobs:
       - name: Use this repository's newest PyPI release
         if: inputs.dialect == 'pypi'
         run: |
-          pip install "sqlalchemy-seerdb[test]"
+          pip install "sqlalchemy-seerdb[test]" "SQLAlchemy==$SQLALCHEMY"
           VERSION=$(pip show sqlalchemy-seerdb | awk '/^Version:/{print $2}')
           echo "newest sqlalchemy-seerdb release on PyPI: $VERSION"
           git checkout -q "$VERSION"
@@ -89,7 +95,7 @@ jobs:
       # `pip install .[test]` brings the released driver from PyPI, whatever the
       # dependency floor resolves to: that is what `latest` (or `pypi`) tests.
       - if: inputs.dialect != 'pypi'
-        run: pip install .[test]
+        run: pip install .[test] "SQLAlchemy==$SQLALCHEMY"
       # A version pins the released driver to exactly that release.
       - name: Pin the released driver
         if: inputs.seerdb != 'latest' && inputs.seerdb != 'pypi' && inputs.seerdb != 'master' && inputs.seerdb != 'tag'
