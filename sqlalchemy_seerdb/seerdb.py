@@ -32,7 +32,7 @@ from sqlalchemy.dialects.oracle.base import (
     OracleDialect,
     OracleExecutionContext,
 )
-from sqlalchemy.dialects.oracle.types import _OracleDate
+from sqlalchemy.dialects.oracle.types import _OracleBoolean, _OracleDate
 from sqlalchemy.engine import cursor as _cursor
 from sqlalchemy.engine import interfaces
 
@@ -68,6 +68,25 @@ class _SeerdbDate(_OracleDate):
     def result_processor(self, dialect, coltype):
         def process(value):
             return value.date() if value is not None else None
+
+        return process
+
+
+class _SeerdbBoolean(_OracleBoolean):
+    """A `Boolean` column read back as a `bool`.
+
+    Before 23ai there is no BOOLEAN type, so the column is a NUMBER and the
+    driver reads 1 or 0 back as a number. From SQLAlchemy 2.1 the generic
+    dialect leaves the conversion to an output type handler that only the
+    drivers it ships with install, so here it is taken as it is for `Date`. A
+    native BOOLEAN already arrives as a `bool` and passes through.
+    """
+
+    def result_processor(self, dialect, coltype):
+        def process(value):
+            if value is None or isinstance(value, bool):
+                return value
+            return bool(value)
 
         return process
 
@@ -288,8 +307,13 @@ class SeerdbDialect(OracleDialect):
     # no processor either way, so a Float column came back holding a Decimal.
     supports_native_decimal = True
 
-    # As the base dialect's, plus the date narrowing above.
-    colspecs: ClassVar[dict] = {**_oracle_base.colspecs, sqltypes.Date: _SeerdbDate}
+    # As the base dialect's, plus the date narrowing and the boolean
+    # conversion above.
+    colspecs: ClassVar[dict] = {
+        **_oracle_base.colspecs,
+        sqltypes.Date: _SeerdbDate,
+        sqltypes.Boolean: _SeerdbBoolean,
+    }
 
     # No SQL is generated differently from the base dialect, so cached
     # statements stay valid.
