@@ -27,6 +27,12 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  # The SQLAlchemy every run installs: one exact version, never a range or the
+  # newest release, so a run changes only when this line does. A newer
+  # SQLAlchemy is a deliberate upgrade of its own.
+  SQLALCHEMY: "2.0.54"
+
 jobs:
   # The gating job, and deliberately the only one. It needs no database, so it
   # is fast and deterministic. What it protects is the thing that would silently
@@ -47,7 +53,7 @@ jobs:
       # Install the built distribution rather than running from the source
       # tree, so the entry point is exercised the way a user's install
       # resolves it.
-      - run: pip install .
+      - run: pip install . "SQLAlchemy==$SQLALCHEMY"
       - name: Dialect resolves from its entry point
         run: |
           python - <<'PY'
