@@ -80,6 +80,11 @@ jobs:
           assert isinstance(args['timeout'], int), 'query args must be coerced'
           print('entry point OK:', dialect.__module__ + '.' + dialect.__name__)
           PY
+      # The offline unit tests, the same run the release workflow gates on.
+      # Run here too, a defect they catch (a version left behind in one of its
+      # two places, as 0.3.0's was) fails the PR instead of the tag (#28).
+      - name: Unit tests
+        run: python -m unittest -v
 
   # SQLAlchemy names its dialect compliance suite as the target for third-party
   # dialects, so it is what this repo tests against. It is entirely
