@@ -257,23 +257,6 @@ class SeerdbCompiler(OracleCompiler):
         return super().bindparam_string(name, **kw)
 
 
-def _driver_has_fetch_lobs() -> bool:
-    """Whether the installed driver understands ``fetch_lobs``.
-
-    It arrived in seerdb 3.0 together with the LOB object; passing it to an
-    older driver is a TypeError, and this dialect supports both."""
-    import inspect
-
-    try:
-        params = inspect.signature(seerdb.OracleConnect.__init__).parameters
-    except (AttributeError, TypeError, ValueError):
-        return False
-    return 'fetch_lobs' in params
-
-
-_DRIVER_HAS_FETCH_LOBS = _driver_has_fetch_lobs()
-
-
 class SeerdbDialect(OracleDialect):
     """SQLAlchemy dialect driving the seerdb DBAPI."""
 
@@ -393,12 +376,8 @@ class SeerdbDialect(OracleDialect):
         # comparison the compliance suite makes, are written against values.
         # seerdb 3.0 returns a LOB OBJECT by default instead (matching
         # python-oracledb), so ask for the values this dialect is built on.
-        #
-        # Feature-detected rather than pinned: the same dialect still has to
-        # work against a driver that predates the option, and its floor cannot
-        # be raised to a release that is not published yet.
-        if _DRIVER_HAS_FETCH_LOBS:
-            options['fetch_lobs'] = False
+        # The driver floor is seerdb>=3.0.0, so the option is always understood.
+        options['fetch_lobs'] = False
         for key, value in url.query.items():
             # A repeated key arrives as a tuple; the driver takes one value.
             options[key] = _coerce(
